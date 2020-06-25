@@ -1,12 +1,9 @@
-use crate::utils::TLDS;
 use err_derive::Error;
-use matches::matches;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
-use std::str::FromStr;
 
 fn is_invalid_domain_char(c: char) -> bool {
-    matches!(
+    matches::matches!(
         c,
         '\0' | '\t' | '\n' | '\r' | ' ' | '#' | '%' | '/' | ':' | '?' | '@' | '[' | '\\' | ']'
     )
@@ -24,8 +21,8 @@ pub enum ParseEmailError {
     EmptyDomain,
     #[error(display = "email address contains invalid characters in the domain part")]
     InvalidDomainChars,
-    #[error(display = "email address domain part is not in a public top-level domain")]
-    InvalidTld,
+    #[error(display = "email address domain part cannot be a raw IP address")]
+    RawAddrNotAllowed,
 }
 
 #[derive(Clone)]
@@ -48,7 +45,7 @@ impl Hash for EmailAddress {
     }
 }
 
-impl FromStr for EmailAddress {
+impl std::str::FromStr for EmailAddress {
     type Err = ParseEmailError;
 
     /// Parse and normalize an email address.
@@ -68,10 +65,8 @@ impl FromStr for EmailAddress {
         if domain.find(is_invalid_domain_char).is_some() {
             return Err(ParseEmailError::InvalidDomainChars);
         }
-        // Verify the domain has a valid TLD.
-        let tld_start = domain.rfind('.').map_or(0, |v| v + 1);
-        if !TLDS.contains(&domain[tld_start..]) {
-            return Err(ParseEmailError::InvalidTld);
+        if domain.parse::<std::net::Ipv4Addr>().is_ok() {
+            return Err(ParseEmailError::RawAddrNotAllowed);
         }
         Ok(EmailAddress::from_parts(&local, &domain))
     }
@@ -175,11 +170,9 @@ mod tests {
         }
         parse("example.foo+bar@example.com", "example.foo+bar@example.com");
         parse("EXAMPLE.FOO+BAR@EXAMPLE.COM", "example.foo+bar@example.com");
-        parse("BJÖRN@göteborg.se", "björn@xn--gteborg-90a.se");
-        parse("İⅢ@İⅢ.ninja", "i̇ⅲ@xn--iiii-qwc.ninja");
+        parse("BJÖRN@göteborg.test", "björn@xn--gteborg-90a.test");
+        parse("İⅢ@İⅢ.example", "i̇ⅲ@xn--iiii-qwc.example");
         parse("\"ex@mple\"@example.com", "\"ex@mple\"@example.com");
-        parse("test@example.موقع", "test@example.xn--4gbrim");
-        parse("test@uk", "test@uk");
     }
 
     #[test]
@@ -189,12 +182,9 @@ mod tests {
         }
         parse("foo");
         parse("foo@");
-        parse("@foo.com");
+        parse("@foo.example");
         parse("foo@127.0.0.1");
         parse("foo@[::1]");
-        parse("foo@bla.test");
-        parse("foo@bla.example");
-        parse("foo@bla.invalid");
     }
 
     #[test]

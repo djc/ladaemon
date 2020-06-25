@@ -56,12 +56,6 @@ public_url = "" # Required
 #
 trusted_proxies = ["127.0.0.0/8", "::1"]
 
-# Whitelist of origins that are allowed to use this broker. If left unset, the
-# broker will allow any Relying Party to use it. (Note that an empty list here
-# has different meaning than leaving it unset.)
-
-#allowed_origins = ["https://example.com"]
-
 # The 'From' name and address used by Portier to send emails.
 
 from_name = "Portier"
@@ -134,6 +128,55 @@ generate_rsa_command = ["openssl", "genrsa", "2048"]
 # value is a Postmark server API token.
 
 #postmark_token = ""
+
+################################################################
+# Access control
+
+# The lists in this section all take literal string values, but also filenames
+# by prefixing a path with `@`. These files must contain one value per line,
+# but may contain empty lines or comments starting with `//` or `#`.
+#
+# Note that files are only loaded once during startup, and the broker must be
+# restarted after updating them.
+
+# List of (exact) website origins that are allowed to use this broker. If left
+# unset, the broker will allow any Relying Party to use it. (Note that an empty
+# list here has different meaning than leaving it unset.)
+
+#allowed_origins = ["https://example.com"]
+
+# List of (exact) email domains that are explicitely allowed to use this
+# broker. When an email address matches this list, checks for
+# `blocked_domains`, `valid_tlds` and `valid_suffixes` are skipped.
+#
+# This is a good place to add test domains that aren't public, like
+# `my-domain.test`.
+
+allowed_domains = []
+
+# Set this flag to true to treat any email domain not in `allowed_domains` as
+# blocked. This effectively disables the checks for `blocked_domains`,
+# `valid_tlds` and `valid_suffixes`. Useful for private brokers.
+
+allowed_domains_only = false
+
+# List of (exact) email domains that are explicitely blocked from using this
+# broker.
+
+blocked_domains = []
+
+# List of (exact) top-level domains (TLDs) considered valid for email
+# addresses. The default is to use a recent copy of the IANA list from:
+# https://data.iana.org/TLD/
+
+valid_tlds = ["@tlds-alpha-by-domain.txt"]
+
+# List of domain suffixes considered valid for email addresses. This list
+# follows the format described at: https://publicsuffix.org/
+#
+# The default is also to use a recent copy of the list from the above site.
+
+valid_suffixes = ["@public_suffix_list.dat"]
 
 ################################################################
 # Advanced settings

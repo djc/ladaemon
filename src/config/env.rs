@@ -1,4 +1,5 @@
 use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
+use crate::config::StringList;
 use crate::crypto::SigningAlgorithm;
 use serde::Deserialize;
 use std::borrow::ToOwned;
@@ -14,8 +15,18 @@ pub struct EnvConfig {
     listen_ip: Option<String>,
     listen_port: Option<u16>,
     public_url: Option<String>,
-    allowed_origins: Option<Vec<String>>,
     data_dir: Option<String>,
+
+    allowed_origins: Option<StringList>,
+    #[serde(default)]
+    allowed_domains: StringList,
+    allowed_domains_only: Option<bool>,
+    #[serde(default)]
+    blocked_domains: StringList,
+    #[serde(default)]
+    valid_tlds: StringList,
+    #[serde(default)]
+    valid_suffixes: StringList,
 
     static_ttl: Option<u64>,
     discovery_ttl: Option<u64>,
@@ -93,11 +104,47 @@ impl EnvConfig {
         if let Some(val) = parsed.public_url {
             builder.public_url = Some(val);
         }
-        if let Some(val) = parsed.allowed_origins {
-            builder.allowed_origins = Some(val);
-        }
         if let Some(val) = parsed.data_dir {
             builder.data_dir = val;
+        }
+
+        if let Some(val) = parsed.allowed_origins {
+            let list = builder.allowed_origins.get_or_insert_with(|| vec![]);
+            for (source, res) in val.iter_values() {
+                let data = res.expect(&format!("IO error in BROKER_ALLOWED_ORIGINS {}", source));
+                list.push(data.into_owned());
+            }
+        }
+        for (source, res) in parsed.allowed_domains.iter_values() {
+            let data = res.expect(&format!("IO error in BROKER_ALLOWED_DOMAINS {}", source));
+            builder
+                .domain_validator
+                .add_allowed_domain(data.as_ref())
+                .expect(&format!("Invalid BROKER_ALLOWED_DOMAINS {}", source));
+        }
+        for (source, res) in parsed.blocked_domains.iter_values() {
+            let data = res.expect(&format!("IO error in BROKER_BLOCKED_DOMAINS {}", source));
+            builder
+                .domain_validator
+                .add_blocked_domain(data.as_ref())
+                .expect(&format!("Invalid BROKER_BLOCKED_DOMAINS {}", source));
+        }
+        for (source, res) in parsed.valid_tlds.iter_values() {
+            let data = res.expect(&format!("IO error in BROKER_VALID_TLDS {}", source));
+            builder
+                .domain_validator
+                .add_valid_tld(data.as_ref())
+                .expect(&format!("Invalid BROKER_VALID_TLDS {}", source));
+        }
+        for (source, res) in parsed.valid_suffixes.iter_values() {
+            let data = res.expect(&format!("IO error in BROKER_VALID_SUFFIXES {}", source));
+            builder
+                .domain_validator
+                .add_valid_suffix(data.as_ref())
+                .expect(&format!("Invalid BROKER_VALID_SUFFIXES {}", source));
+        }
+        if let Some(val) = parsed.allowed_domains_only {
+            builder.domain_validator.allowed_domains_only = val;
         }
 
         if let Some(val) = parsed.static_ttl {

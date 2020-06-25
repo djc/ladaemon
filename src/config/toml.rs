@@ -1,4 +1,5 @@
 use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
+use crate::config::StringList;
 use crate::crypto::SigningAlgorithm;
 use crate::webfinger::Link;
 use serde::Deserialize;
@@ -13,8 +14,18 @@ pub struct TomlConfig {
     listen_ip: Option<String>,
     listen_port: Option<u16>,
     public_url: Option<String>,
-    allowed_origins: Option<Vec<String>>,
     data_dir: Option<String>,
+
+    allowed_origins: Option<StringList>,
+    #[serde(default)]
+    allowed_domains: StringList,
+    allowed_domains_only: Option<bool>,
+    #[serde(default)]
+    blocked_domains: StringList,
+    #[serde(default)]
+    valid_tlds: StringList,
+    #[serde(default)]
+    valid_suffixes: StringList,
 
     static_ttl: Option<u64>,
     discovery_ttl: Option<u64>,
@@ -139,7 +150,7 @@ impl TomlConfig {
                 parsed.public_url = table.public_url.clone();
             }
             if parsed.allowed_origins.is_none() {
-                parsed.allowed_origins = table.allowed_origins.clone();
+                parsed.allowed_origins = table.allowed_origins.clone().map(|list| list.into());
             }
         }
 
@@ -229,11 +240,47 @@ impl TomlConfig {
         if let Some(val) = parsed.public_url {
             builder.public_url = Some(val);
         }
-        if let Some(val) = parsed.allowed_origins {
-            builder.allowed_origins = Some(val)
-        };
         if let Some(val) = parsed.data_dir {
             builder.data_dir = val;
+        }
+
+        if let Some(val) = parsed.allowed_origins {
+            let list = builder.allowed_origins.get_or_insert_with(|| vec![]);
+            for (source, res) in val.iter_values() {
+                let data = res.expect(&format!("IO error in allowed_origins {}", source));
+                list.push(data.into_owned());
+            }
+        };
+        for (source, res) in parsed.allowed_domains.iter_values() {
+            let data = res.expect(&format!("IO error in allowed_domains {}", source));
+            builder
+                .domain_validator
+                .add_allowed_domain(data.as_ref())
+                .expect(&format!("Invalid allowed_domains {}", source));
+        }
+        for (source, res) in parsed.blocked_domains.iter_values() {
+            let data = res.expect(&format!("IO error in blocked_domains {}", source));
+            builder
+                .domain_validator
+                .add_blocked_domain(data.as_ref())
+                .expect(&format!("Invalid blocked_domains {}", source));
+        }
+        for (source, res) in parsed.valid_tlds.iter_values() {
+            let data = res.expect(&format!("IO error in valid_tlds {}", source));
+            builder
+                .domain_validator
+                .add_valid_tld(data.as_ref())
+                .expect(&format!("Invalid valid_tlds {}", source));
+        }
+        for (source, res) in parsed.valid_suffixes.iter_values() {
+            let data = res.expect(&format!("IO error in valid_suffixes {}", source));
+            builder
+                .domain_validator
+                .add_valid_suffix(data.as_ref())
+                .expect(&format!("Invalid valid_suffixes {}", source));
+        }
+        if let Some(val) = parsed.allowed_domains_only {
+            builder.domain_validator.allowed_domains_only = val;
         }
 
         if let Some(val) = parsed.static_ttl {
